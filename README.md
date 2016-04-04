@@ -1,5 +1,5 @@
 # SensiParty
-SensiParty - wrapper to interact with the Emerson Sensi thermostat. Special thanks to @mguterl and the mguterl/sensi library. This is still a work in progress
+SensiParty - wrapper to interact with the [Emerson Sensi thermostat](http://www.emersonclimate.com/en-us/products/thermostats/sensi/pages/sensi-wifi-thermostat.aspx). Special thanks to @mguterl and the [mguterl/sensi](https://github.com/mguterl/sensi) library. This is still a work in progress
 
 # Known Issue
 - setHeat in sensi.rb is not working. Getting a 500 error with this
