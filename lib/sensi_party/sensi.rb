@@ -1,5 +1,6 @@
 require 'open-uri'
 require 'json'
+require 'rest-client'
 
 class SensiParty::Sensi
   SUCCESS_CODE = 200
@@ -15,6 +16,7 @@ class SensiParty::Sensi
     @cookies = nil
     @connectionToken = nil
     @thermostats = nil
+    @incrementor = 0
   end
 
   def start
@@ -63,11 +65,33 @@ class SensiParty::Sensi
     @thermostats = json
   end
 
+  def turnOff
+    buildSendRequest(:Off)
+  end
+
   def setHeat(temperature)
+    buildSendRequest(:Heat)
+    buildSendRequest(:SetHeat, temperature)
+  end
+
+  protected
+
+  def getConnectionToken
+    @connectionToken ||= self.negotiate()
+  end
+
+  def getFirstThermostat
+    self.getThermostats if @thermostats.nil?
+    @thermostats.first
+  end
+
+  def buildSendRequest(cmd, *args)
     response = nil
     url = "#{@baseUrl}/realtime/send"
 
-    myThermostat = @thermostats.first
+    payloadRequest = buildPayloadRequest(cmd, args)
+    @incrementor += 1
+
     additionalOpts = {
       headers: @defaultHeaders.merge({
         'Accept-Encoding': 'gzip, deflate',
@@ -77,22 +101,41 @@ class SensiParty::Sensi
         connectionToken: self.getConnectionToken()
       },
       cookies: @cookies,
-      payload: URI.encode_www_form({
-        'H': 'thermostat-v1',
-        'M': 'SetHeat',
-        'A': [myThermostat['ICD'], temperature, 'F'],
-        'I': 1
-        }),
+      payload: URI.encode({
+        "H": "thermostat-v1",
+        "M": payloadRequest[:M],
+        "A": payloadRequest[:A],
+        "I": @incrementor.to_s
+        }.to_s),
       timeout: nil
     }
 
     response = self.sendRequest(url, :post, additionalOpts)
   end
 
-  protected
+  def buildPayloadRequest(cmd, *args)
+    result = {:A => []}
+    commandsLookup = {
+      :Off => ['SetSystemMode', 'Off'],
+      :Heat => ['SetSystemMode', 'Heat'],
+      :SetHeat => ['SetHeat', '**X**', 'F']
+    }
 
-  def getConnectionToken
-    @connectionToken ||= self.negotiate()
+    command = commandsLookup[cmd]
+    result[:M] = command.shift.to_s
+    icd = self.getFirstThermostat()['ICD']
+    
+    result[:A] = command.unshift(icd).inject([]){|acc, item|
+      if item =~ /\*\*X\*\*/
+        acc << args.shift
+      else
+        acc << item.to_s
+      end
+
+      acc
+    }
+    
+    result
   end
 
   def sendRequest(url, method, opts={})
@@ -103,8 +146,8 @@ class SensiParty::Sensi
     }
 
     begin
-      response = RestClient::Request.execute(defaultArgs.merge(opts))
-    rescue RestClient::ExceptionWithResponse => err
+      response = ::RestClient::Request.execute(defaultArgs.merge(opts))
+    rescue ::RestClient::ExceptionWithResponse => err
       puts "RestClient::ExceptionWtihResponse #{err}"
     rescue Exception => err
       puts err
